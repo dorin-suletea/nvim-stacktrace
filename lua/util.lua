@@ -34,4 +34,28 @@ M.get_buf_content_fingerprint = function(buf_id)
     end
 end
 
+M.get_all_visible_buffers = function ()
+    local ret = {}
+    local tab_page = vim.api.nvim_get_current_tabpage()
+    local all_windows = vim.api.nvim_tabpage_list_wins(tab_page)
+    for _, id in pairs(all_windows) do
+        local win_buf_id = vim.api.nvim_win_get_buf(id)
+        local win_buf_name = vim.api.nvim_buf_get_name(win_buf_id)
+        local short_name_location = string.find(win_buf_name, "[^/]*$") or 0
+        local win_buf_short_name = string.sub(win_buf_name, short_name_location, -1)
+
+        ret[win_buf_short_name] = win_buf_id
+        -- print (win_buf_name .. " "..win_buf_id .. " "..win_buf_short_name )
+        -- table.insert(ret, {name = win_buf_short_name, bufid = win_buf_id })
+    end
+    return ret
+end
+
+
+
+
+
+
+
+
 return M
