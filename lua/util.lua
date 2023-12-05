@@ -25,8 +25,7 @@ end
 
 -- A rudimentary way to figure out if buffer contents changed. 
 -- Used to avoid re-parsing the same same content without any reason.
-M.get_buf_content_fingerprint = function(buf_id)
-    local lines = vim.api.nvim_buf_get_lines(buf_id, 0, -1, false)
+M.get_text_fingerprint = function(lines)
     if #lines >= 4 then
         return #lines..lines[2]..lines[#lines-1]
     else
@@ -50,12 +49,5 @@ M.get_all_visible_buffers = function ()
     end
     return ret
 end
-
-
-
-
-
-
-
 
 return M
