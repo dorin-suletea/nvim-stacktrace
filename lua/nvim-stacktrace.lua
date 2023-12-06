@@ -1,13 +1,12 @@
 local util = require("util")
 
 --TODO:
--- blacklist must be a regex
 -- documentation
 -- cron job to trigger run instead of by hand
 
 local default_config = {
     target_buffers = {"[dap-repl]"},                             -- enable plugin for these buffer names
-    win_picker_blacklist = {"[dap-repl]","[dap-terminal]"},      -- when jumping to source never consider these buffer names as candidates
+    win_picker_blacklist = {"dap%-repl", "dap%-terminal"},       -- when jumping to source never consider these buffer names as candidates
     highlight_group = "Tag",                                     -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
     jump_key = "<CR>",                                           -- will open source code location when this key is pressed in one of the target buffers
 }
@@ -194,15 +193,21 @@ function M.window_picker(blacklist)
     local usable = {}
     local all_windows = util.get_all_visible_buffers()
 
-    -- Search all open windows and return only windows eligible 
-    -- for opening source code that are not blacklisted.
+    print (vim.inspect(blacklist))
+
+    -- Search all open windows and retain only editable ones 
+    -- that are not holding a blacklisted buffer.
     for name, info in pairs(all_windows) do
-        print(name)
         local win_config = vim.api.nvim_win_get_config(info.win_id)
+
+        print ("name " ..name)
+        local is_blacklisted = util.matches_any(name, blacklist)
+        print(is_blacklisted)
+        print ("---------")
         if win_config.focusable
             and not win_config.external
-            and not util.list_contains((blacklist or {}), name) then
-            table.insert(usable, info.win_id)
+            and not is_blacklisted then
+                table.insert(usable, info.win_id)
         end
     end
 

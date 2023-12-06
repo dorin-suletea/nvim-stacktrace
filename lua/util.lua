@@ -23,6 +23,15 @@ M.list_contains = function(list, x)
 	return false
 end
 
+M.matches_any = function (input, pattern_list)
+    for _, i in pairs(pattern_list or {}) do
+        if string.match(input, i) ~=nil then
+            return true
+        end
+    end
+    return false
+end
+
 -- A rudimentary way to figure out if buffer contents changed. 
 -- Used to avoid re-parsing the same same content without any reason.
 M.get_text_fingerprint = function(lines)
