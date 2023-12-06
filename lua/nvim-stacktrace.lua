@@ -30,7 +30,7 @@ local function run()
     -- For all buffers
     local all_buffers = util.get_all_visible_buffers()
     for _, name in pairs(M.config.target_buffers) do
-        local id = all_buffers[name]
+        local id = all_buffers[name].win_buf_id
         -- Retain the ones in the target list
         if id ~=nil then
             print("id"..id.." name"..name)
@@ -72,7 +72,6 @@ function M.parse_repl_java_stack(lines)
         if tag_start ~= nil and tag_end ~= nil and line_delimiter ~= nil and file_type_delimiter ~=nil and at_delimiter ~=nil then
             local class_name =  string.sub(line, tag_start + 1, file_type_delimiter - 1)
             local line_in_class = string.sub(line, line_delimiter + 1, tag_end - 1)
-            print("line "..line)
             local package_and_method = string.sub(line, at_delimiter + 3, tag_start - 1)
             local package_name = string.sub(package_and_method, 0, string.find(package_and_method, class_name) - 2)
             stack_locations[i-1] = {
@@ -156,8 +155,64 @@ function M.retain_workspace_only(stack_locations)
     return jumpable
 end
 
+-- 
+-- Prompts the user to select which buffer to load the class source onto.
+-- --
+-- Receives a list of buffer names that might be editable but never eligible for opening code in.
+-- For example if navigating from a repl trace to code you probably don't want to open the source in [dap-repl] buffer 
+-- and lose the stacktrace.
+-- --
+-- Heavily inspired from : https://github.com/nvim-tree/nvim-tree.lua/blob/8c534822a7d16c83cf69928c53e1d8a13bd2734a/lua/nvim-tree/actions/node/open-file.lua#L121
+function M.window_picker(blacklist)
+    local usable = {}
+    local all_windows = util.get_all_visible_buffers()
 
+    -- Search all open windows and return only windows eligible 
+    -- for opening source code that are not blacklisted.
+    for name, info in pairs(all_windows) do
+        local win_config = vim.api.nvim_win_get_config(info.win_id)
+        if win_config.focusable
+            and not win_config.external
+            and not util.list_contains((blacklist or {}), name) then
+            table.insert(usable, info.win_id)
+        end
+    end
 
-vim.keymap.set("n", "dx", run, {desc = 'exp'})
+    -- no eligible windows present
+    if #usable == 0 then
+        print("error : no eligible window to pick")
+        return nil
+    end
+    -- only one eligible window, return it
+    if #usable == 1 then
+        return usable[1]
+    end
+    -- many windows are eligible, make the user select the window
+    for i, id in pairs(usable) do
+        vim.api.nvim_win_set_option(id, "statusline", "%=" .. i .. "%=")
+        vim.api.nvim_win_set_option(id, "winhl", "StatusLine:StackWinPicker,StatusLineNC:StackWinPickerNC")
+    end
+    vim.cmd "redraw"
+
+    -- get the user selection
+    print("Pick window")
+    local c = vim.fn.getchar()
+    while type(c) ~= "number" do
+        c = vim.fn.getchar()
+    end
+    local user_selection = tonumber(vim.fn.nr2char(c))
+    vim.cmd("normal! :")
+
+    if user_selection>#usable then
+        print("error : Invalid selection "..user_selection.." valid range 1.."..#usable)
+        return nil
+    end
+
+    return usable[user_selection]
+end
+
+vim.keymap.set("n", "dx", function ()
+    window_picker({})
+end, {desc = 'exp'})
 
 return M

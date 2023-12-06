@@ -43,9 +43,7 @@ M.get_all_visible_buffers = function ()
         local short_name_location = string.find(win_buf_name, "[^/]*$") or 0
         local win_buf_short_name = string.sub(win_buf_name, short_name_location, -1)
 
-        ret[win_buf_short_name] = win_buf_id
-        -- print (win_buf_name .. " "..win_buf_id .. " "..win_buf_short_name )
-        -- table.insert(ret, {name = win_buf_short_name, bufid = win_buf_id })
+        ret[win_buf_short_name] = { win_buf_id = win_buf_id, win_id = id }
     end
     return ret
 end
