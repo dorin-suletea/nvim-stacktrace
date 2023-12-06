@@ -1,21 +1,32 @@
 local util = require("util")
 
-local default_config = {
-    target_buffers = {"[dap-repl]"},            -- enable plugin for these buffer names
-    win_picker_blacklist = {"[dap-repl]"},      -- when jumping to source never consider these buffer names as candidates
-    highlight_group = "Tag"                     -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
+--TODO:
+-- blacklist must be a regex
+-- documentation
+-- cron job to trigger run instead of by hand
 
+local default_config = {
+    target_buffers = {"[dap-repl]"},                             -- enable plugin for these buffer names
+    win_picker_blacklist = {"[dap-repl]","[dap-terminal]"},      -- when jumping to source never consider these buffer names as candidates
+    highlight_group = "Tag",                                     -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
+    jump_key = "<CR>",                                           -- will open source code location when this key is pressed in one of the target buffers
 }
 
 local M = {}
 M.config = {}
 M.fingerprint_by_id = {}
 M.highlight_ns = nil
+M.jumpable = {}
 
 function M.setup(config)
     M.config = vim.tbl_deep_extend('force', vim.deepcopy(default_config), config or {})
 
+    -- jumpable highlighting
     M.highlight_ns = vim.api.nvim_create_namespace("stack_parser_hl")
+
+    -- win picker highlighting
+    vim.api.nvim_set_hl(0, 'StackWinPicker', { bg = "#d79921", fg = "#000000" })
+    vim.api.nvim_set_hl(0, 'StackWinPickerNC', { bg = "#d79922", fg = "#000001" })
 end
 
 function M.do_highlight(buffer_id, jumpable_lines )
@@ -25,7 +36,6 @@ function M.do_highlight(buffer_id, jumpable_lines )
     end
 end
 
-
 local function run()
     -- For all buffers
     local all_buffers = util.get_all_visible_buffers()
@@ -33,9 +43,7 @@ local function run()
         local id = all_buffers[name].win_buf_id
         -- Retain the ones in the target list
         if id ~=nil then
-            print("id"..id.." name"..name)
             local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
-            print(buffer_lines)
             local lines_fingerprint = util.get_text_fingerprint(buffer_lines)
             -- Re-parse if text changed since last parsing
             if lines_fingerprint ~= M.fingerprint_by_id[id] then
@@ -43,14 +51,33 @@ local function run()
                 local stack_lines = M.parse_repl_java_stack(buffer_lines)
                 local jumpable_lines = M.retain_workspace_only(stack_lines)
                 M.do_highlight(id, jumpable_lines)
+                M.jumpable[id] = jumpable_lines
 
-
+                vim.api.nvim_buf_set_keymap(id, "n", M.config.jump_key, [[:lua require('nvim-stacktrace').jump() <CR>]], {})
             end
         end
     end
-    print("done")
 end
 
+function M.jump()
+    local current_buffer_id = vim.fn.bufnr("%")
+    local cursor_line = vim.api.nvim__buf_stats(0).current_lnum
+
+
+    -- If buffer was parsed
+    local jumpable = M.jumpable[current_buffer_id]
+    if jumpable ~=nil then
+        -- If line contains a valid path
+        local jump_point = jumpable[cursor_line - 1]
+        if jump_point ~= nil then
+            local target_win = M.window_picker(M.config.win_picker_blacklist)                                 -- select window to use
+            if target_win ~=nil then
+                vim.fn.win_gotoid(target_win)                                                                 -- focus it
+                vim.cmd("edit ".."+"..jump_point.navigation.jump_line.." "..jump_point.navigation.file_path)  -- open file at line
+            end
+        end
+    end
+end
 -- 
 -- Parses java stack traces formatted to the rules of [dap-repl].
 -- -- 
@@ -170,6 +197,7 @@ function M.window_picker(blacklist)
     -- Search all open windows and return only windows eligible 
     -- for opening source code that are not blacklisted.
     for name, info in pairs(all_windows) do
+        print(name)
         local win_config = vim.api.nvim_win_get_config(info.win_id)
         if win_config.focusable
             and not win_config.external
@@ -203,16 +231,14 @@ function M.window_picker(blacklist)
     local user_selection = tonumber(vim.fn.nr2char(c))
     vim.cmd("normal! :")
 
-    if user_selection>#usable then
-        print("error : Invalid selection "..user_selection.." valid range 1.."..#usable)
+    if user_selection == nil or user_selection>#usable then
+        print("error : Invalid selection "..(user_selection or "nil").." valid range 1.."..#usable)
         return nil
     end
 
     return usable[user_selection]
 end
 
-vim.keymap.set("n", "dx", function ()
-    window_picker({})
-end, {desc = 'exp'})
+vim.keymap.set("n", "dx", run, {desc = 'exp'})
 
 return M
