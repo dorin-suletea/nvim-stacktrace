@@ -6,7 +6,7 @@ local util = require("util")
 
 local default_config = {
     target_buffers = {"[dap-repl]"},                             -- enable plugin for these buffer names
-    win_picker_blacklist = {"dap%-repl", "dap%-terminal"},       -- when jumping to source never consider these buffer names as candidates
+    win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP Stacks"},       -- when jumping to source never consider these buffer names as candidates
     highlight_group = "Tag",                                     -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
     jump_key = "<CR>",                                           -- will open source code location when this key is pressed in one of the target buffers
 }
@@ -193,17 +193,11 @@ function M.window_picker(blacklist)
     local usable = {}
     local all_windows = util.get_all_visible_buffers()
 
-    print (vim.inspect(blacklist))
-
     -- Search all open windows and retain only editable ones 
     -- that are not holding a blacklisted buffer.
     for name, info in pairs(all_windows) do
         local win_config = vim.api.nvim_win_get_config(info.win_id)
-
-        print ("name " ..name)
         local is_blacklisted = util.matches_any(name, blacklist)
-        print(is_blacklisted)
-        print ("---------")
         if win_config.focusable
             and not win_config.external
             and not is_blacklisted then
@@ -244,6 +238,29 @@ function M.window_picker(blacklist)
     return usable[user_selection]
 end
 
-vim.keymap.set("n", "dx", run, {desc = 'exp'})
+
+-- TODO: this is sensible but how to know when the entire buffer is written?
+function experiment()
+    print("experiment")
+    vim.api.nvim_buf_attach(0,true, {
+        on_lines = function (_, handle, tick, first_line, last_line, bytecount,_,_)
+            -- print(handle)
+        
+
+            local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            print(vim.inspect(lines))
+
+            -- print(first_line)
+            -- print(tick)
+            print("-------------")
+        end,
+        on_reload = function (_, handle)
+            print("reloaded")
+        end
+        
+    })
+end
+
+vim.keymap.set("n", "dx", experiment, {desc = 'exp'})
 
 return M
