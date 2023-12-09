@@ -20,6 +20,21 @@ M.jumpable = {}
 function M.setup(config)
     M.config = vim.tbl_deep_extend('force', vim.deepcopy(default_config), config or {})
 
+    -- TODO: this approach + buf became visible works for repl.
+    require('dap').listeners.after.event_terminated["dapui_config"] = function ()
+        print(vim.fn.bufnr("dap-repl"))
+        -- M.run()
+    end
+
+
+
+    require('dap').listeners.after.event_thread["dapui_config"] = function (_, body)
+            local id = vim.fn.bufnr("DAP Stacks")
+            local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
+            print(vim.inspect(buffer_lines))
+        print(vim.inspect(body))
+    end
+
     -- jumpable highlighting
     M.highlight_ns = vim.api.nvim_create_namespace("stack_parser_hl")
 
@@ -35,7 +50,7 @@ function M.do_highlight(buffer_id, jumpable_lines )
     end
 end
 
-local function run()
+function M.run()
     -- For all buffers
     local all_buffers = util.get_all_visible_buffers()
     for _, name in pairs(M.config.target_buffers) do
@@ -239,26 +254,24 @@ function M.window_picker(blacklist)
 end
 
 
+-- BINGO : this is written in 1 go. We can read the lines like this & use the repl with another strategy.
+--
+--TODO: 'o' keybinding already jumps to location. we only need to hl
 -- TODO: this is sensible but how to know when the entire buffer is written?
 function experiment()
-    print("experiment")
-    vim.api.nvim_buf_attach(0,true, {
-        on_lines = function (_, handle, tick, first_line, last_line, bytecount,_,_)
-            -- print(handle)
-        
+    vim.api.nvim_buf_attach(0, true, { 
+        on_lines = function (line, handle, tick, first_line, last_line, bytecount,_,_) 
 
-            local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-            print(vim.inspect(lines))
-
-            -- print(first_line)
-            -- print(tick)
-            print("-------------")
-        end,
-        on_reload = function (_, handle)
-            print("reloaded")
+            local buffer_lines = vim.api.nvim_buf_get_lines(handle, 0, -1, false)
+            print(vim.inspect(buffer_lines))
         end
-        
     })
+        -- local id = vim.fn.bufnr("DAP Stacks")
+
+        -- local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
+        -- print(id)
+        -- print(vim.inspect(buffer_lines))
+        
 end
 
 vim.keymap.set("n", "dx", experiment, {desc = 'exp'})
