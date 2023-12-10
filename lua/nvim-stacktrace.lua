@@ -2,13 +2,12 @@ local util = require("util")
 
 --TODO:
 -- documentation
--- cron job to trigger run instead of by hand
+-- stacktrace.
 
 local default_config = {
-    target_buffers = {"[dap-repl]"},                             -- enable plugin for these buffer names
     win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP Stacks"},       -- when jumping to source never consider these buffer names as candidates
-    highlight_group = "Tag",                                     -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
-    jump_key = "<CR>",                                           -- will open source code location when this key is pressed in one of the target buffers
+    highlight_group = "Tag",                                                   -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
+    jump_key = "<CR>",                                                         -- will open source code location when this key is pressed in one of the target buffers
 }
 
 local M = {}
@@ -19,28 +18,21 @@ M.jumpable = {}
 
 function M.setup(config)
     M.config = vim.tbl_deep_extend('force', vim.deepcopy(default_config), config or {})
-
-    -- TODO: this approach + buf became visible works for repl.
-    require('dap').listeners.after.event_terminated["dapui_config"] = function ()
-        print(vim.fn.bufnr("dap-repl"))
-        -- M.run()
-    end
-
-
-
-    require('dap').listeners.after.event_thread["dapui_config"] = function (_, body)
-            local id = vim.fn.bufnr("DAP Stacks")
-            local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
-            print(vim.inspect(buffer_lines))
-        print(vim.inspect(body))
-    end
-
-    -- jumpable highlighting
-    M.highlight_ns = vim.api.nvim_create_namespace("stack_parser_hl")
-
-    -- win picker highlighting
+    M.highlight_ns = vim.api.nvim_create_namespace("nvim-stacktrace-hl")
     vim.api.nvim_set_hl(0, 'StackWinPicker', { bg = "#d79921", fg = "#000000" })
     vim.api.nvim_set_hl(0, 'StackWinPickerNC', { bg = "#d79922", fg = "#000001" })
+
+
+    -- Re-parse and highlight repl when:
+    -- 1) it became visible
+    -- 2) nvim-dap finished execution and updated a potentially already visible window)
+    local group = vim.api.nvim_create_augroup("nvim-stacktrace-group", { clear=true })
+    vim.api.nvim_create_autocmd("BufEnter", { 
+        group = group,
+        pattern = "\\[dap-repl\\]",
+        callback = M.run_repl
+    })
+    require('dap').listeners.after.event_terminated["dapui_config"] = M.run_repl
 end
 
 function M.do_highlight(buffer_id, jumpable_lines )
@@ -50,38 +42,14 @@ function M.do_highlight(buffer_id, jumpable_lines )
     end
 end
 
-function M.run()
-    -- For all buffers
-    local all_buffers = util.get_all_visible_buffers()
-    for _, name in pairs(M.config.target_buffers) do
-        local id = all_buffers[name].win_buf_id
-        -- Retain the ones in the target list
-        if id ~=nil then
-            local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
-            local lines_fingerprint = util.get_text_fingerprint(buffer_lines)
-            -- Re-parse if text changed since last parsing
-            if lines_fingerprint ~= M.fingerprint_by_id[id] then
-                M.fingerprint_by_id[id] = lines_fingerprint
-                local stack_lines = M.parse_repl_java_stack(buffer_lines)
-                local jumpable_lines = M.retain_workspace_only(stack_lines)
-                M.do_highlight(id, jumpable_lines)
-                M.jumpable[id] = jumpable_lines
-
-                vim.api.nvim_buf_set_keymap(id, "n", M.config.jump_key, [[:lua require('nvim-stacktrace').jump() <CR>]], {})
-            end
-        end
-    end
-end
-
 function M.jump()
     local current_buffer_id = vim.fn.bufnr("%")
     local cursor_line = vim.api.nvim__buf_stats(0).current_lnum
 
-
-    -- If buffer was parsed
+    -- if buffer was parsed
     local jumpable = M.jumpable[current_buffer_id]
     if jumpable ~=nil then
-        -- If line contains a valid path
+        -- and line contains a valid path
         local jump_point = jumpable[cursor_line - 1]
         if jump_point ~= nil then
             local target_win = M.window_picker(M.config.win_picker_blacklist)                                 -- select window to use
@@ -91,6 +59,28 @@ function M.jump()
             end
         end
     end
+end
+
+
+function M.run_repl()
+    local id = vim.fn.bufnr("dap-repl")
+    if id == -1 then
+        return
+    end
+
+    print("running repl")
+    local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
+    local lines_fingerprint = util.get_text_fingerprint(buffer_lines)
+
+    if lines_fingerprint ~= M.fingerprint_by_id[id] then
+        M.fingerprint_by_id[id] = lines_fingerprint
+        local stack_lines = M.parse_repl_java_stack(buffer_lines)
+        local jumpable_lines = M.retain_workspace_only(stack_lines)
+        M.jumpable[id] = jumpable_lines
+        vim.api.nvim_buf_set_keymap(id, "n", M.config.jump_key, [[:lua require('nvim-stacktrace').jump() <CR>]], {})
+    end
+
+    M.do_highlight(id, M.jumpable[id])
 end
 -- 
 -- Parses java stack traces formatted to the rules of [dap-repl].
@@ -142,7 +132,7 @@ function M.retain_workspace_only(stack_locations)
         return {}
     end
 
-    -- Batch search everything in one go for big performance gains.
+    -- batch search everything in one go for big performance gains.
     local find_cmd = {"find", "."}
     for _, v in pairs(stack_locations) do
         local search = v.navigation.class_name..".java"
@@ -156,7 +146,7 @@ function M.retain_workspace_only(stack_locations)
     local output = vim.fn.system(find_cmd)
     local lines = util.string_split(output,"\n")
 
-    -- Map back file paths to class names.
+    -- map back file paths to class names.
     local keyed_paths = {}
     for _, line in pairs(lines) do
         local class_start = util.string_find_last(line,"/")
@@ -274,6 +264,6 @@ function experiment()
         
 end
 
-vim.keymap.set("n", "dx", experiment, {desc = 'exp'})
+vim.keymap.set("n", "dx", M.run_repl, {desc = 'exp'})
 
 return M
