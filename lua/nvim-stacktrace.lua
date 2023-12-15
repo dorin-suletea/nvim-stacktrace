@@ -2,7 +2,6 @@ local util = require("util")
 
 --TODO:
 -- documentation
--- stacktrace.
 
 local default_config = {
     win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP Stacks"},       -- when jumping to source never consider these buffer names as candidates
@@ -27,7 +26,7 @@ function M.setup(config)
     -- 1) it became visible
     -- 2) nvim-dap finished execution and updated a potentially already visible window)
     local group = vim.api.nvim_create_augroup("nvim-stacktrace-group", { clear=true })
-    vim.api.nvim_create_autocmd("BufEnter", { 
+    vim.api.nvim_create_autocmd("BufEnter", {
         group = group,
         pattern = "\\[dap-repl\\]",
         callback = M.run_repl
@@ -67,8 +66,6 @@ function M.run_repl()
     if id == -1 then
         return
     end
-
-    print("running repl")
     local buffer_lines = vim.api.nvim_buf_get_lines(id, 0, -1, false)
     local lines_fingerprint = util.get_text_fingerprint(buffer_lines)
 
@@ -94,13 +91,15 @@ end
 function M.parse_repl_java_stack(lines)
     local stack_locations = {}
     for i, line in pairs(lines) do
+        local can_parse = string.find(line, ".*%(.*%.java:.*%)") ~=nil
+
         local tag_start,_ = string.find(line,"%(")
         local tag_end, _ = string.find(line,")")
         local line_delimiter = string.find(line,":")
         local file_type_delimiter = util.string_find_last(line,".")
         local at_delimiter = string.find(line,"at ")
 
-        if tag_start ~= nil and tag_end ~= nil and line_delimiter ~= nil and file_type_delimiter ~=nil and at_delimiter ~=nil then
+        if can_parse and tag_start ~= nil and tag_end ~= nil and line_delimiter ~= nil and file_type_delimiter ~=nil and at_delimiter ~=nil then
             local class_name =  string.sub(line, tag_start + 1, file_type_delimiter - 1)
             local line_in_class = string.sub(line, line_delimiter + 1, tag_end - 1)
             local package_and_method = string.sub(line, at_delimiter + 3, tag_start - 1)
@@ -119,6 +118,33 @@ function M.parse_repl_java_stack(lines)
         end
     end
     return stack_locations
+end
+
+--
+-- Retain only files that are not git-ignored.
+-- -- 
+-- A temporary java class from build folder should not be jumpable.
+-- Returns the original list of .gitignore file is not found.
+--
+function M.retain_non_ignored(lines)
+    local has_git_ignore = vim.fn.system("find . -maxdepth 1 -name .gitignore") ~= ""
+    if not has_git_ignore or #lines == 0 then
+       return lines
+    end
+
+    table.unpack = table.unpack or unpack
+    local check_ignore_cmd = {"git", "check-ignore", table.unpack(lines)}
+
+    local output = vim.fn.system(check_ignore_cmd)
+    local ignored_lines = util.string_split(output,"\n")
+
+    local ret = {}
+    for _, line in pairs(lines) do
+        if not util.list_contains(ignored_lines, line) then
+            table.insert(ret, line)
+        end
+    end
+    return ret
 end
 
 -- 
@@ -144,7 +170,10 @@ function M.retain_workspace_only(stack_locations)
     end
     table.remove(find_cmd, #find_cmd)
     local output = vim.fn.system(find_cmd)
-    local lines = util.string_split(output,"\n")
+    local disk_lines = util.string_split(output,"\n")
+
+    -- discard gitignored
+    local lines = M.retain_non_ignored(disk_lines)
 
     -- map back file paths to class names.
     local keyed_paths = {}
