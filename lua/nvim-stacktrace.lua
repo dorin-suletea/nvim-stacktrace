@@ -1,8 +1,5 @@
 local util = require("util")
 
---TODO:
--- documentation
-
 local default_config = {
     win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP Stacks"},       -- when jumping to source never consider these buffer names as candidates
     highlight_group = "Tag",                                                   -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
@@ -21,18 +18,26 @@ function M.setup(config)
     vim.api.nvim_set_hl(0, 'StackWinPicker', { bg = "#d79921", fg = "#000000" })
     vim.api.nvim_set_hl(0, 'StackWinPickerNC', { bg = "#d79922", fg = "#000001" })
 
-
-    -- Re-parse and highlight repl when:
-    -- 1) it became visible
-    -- 2) nvim-dap finished execution and updated a potentially already visible window)
+    -- re-parse when a target buffer became visible.
     local group = vim.api.nvim_create_augroup("nvim-stacktrace-group", { clear=true })
     vim.api.nvim_create_autocmd("BufEnter", {
         group = group,
         pattern = "\\[dap-repl\\]",
-        callback = M.run_repl
+        callback = function() M.run_standard(vim.fn.bufnr("dap-repl")) end
     })
-    require('dap').listeners.after.event_terminated["dapui_config"] = M.run_repl
+    vim.api.nvim_create_autocmd("BufEnter", {
+        group = group,
+        pattern = "*\\[dap-terminal\\]*",
+        callback = function() M.run_standard(vim.fn.bufnr("dap-terminal")) end
+    })
+
+    -- re-parse when nvim-dap finished execution and potentially updated an already visible window.
+    require('dap').listeners.after.event_terminated["dapui_config"] = function ()
+            M.run_standard(vim.fn.bufnr("dap-repl"))
+            M.run_standard(vim.fn.bufnr("dap-terminal"))
+    end
 end
+
 
 function M.do_highlight(buffer_id, jumpable_lines )
     vim.api.nvim_buf_clear_namespace(buffer_id, M.highlight_ns, 0, -1)
@@ -61,8 +66,7 @@ function M.jump()
 end
 
 
-function M.run_repl()
-    local id = vim.fn.bufnr("dap-repl")
+function M.run_standard(id)
     if id == -1 then
         return
     end
@@ -71,7 +75,7 @@ function M.run_repl()
 
     if lines_fingerprint ~= M.fingerprint_by_id[id] then
         M.fingerprint_by_id[id] = lines_fingerprint
-        local stack_lines = M.parse_repl_java_stack(buffer_lines)
+        local stack_lines = M.parse_standard_stacktrace(buffer_lines)
         local jumpable_lines = M.retain_workspace_only(stack_lines)
         M.jumpable[id] = jumpable_lines
         vim.api.nvim_buf_set_keymap(id, "n", M.config.jump_key, [[:lua require('nvim-stacktrace').jump() <CR>]], {})
@@ -79,16 +83,18 @@ function M.run_repl()
 
     M.do_highlight(id, M.jumpable[id])
 end
+
 -- 
--- Parses java stack traces formatted to the rules of [dap-repl].
+-- Parses java stack traces in the default format. Used by [dap-repl] & [dap-terminal]
+-- --
 -- -- 
 -- A stack line is formatted differently depending on the buffer it is displayed in,
 -- but essentially it's the same information : class, package, line.
 -- --
--- To support a different format or a different language a specialized parser must be provided
+-- To support a different formats or different language a specialized parser must be provided
 -- that can return the same navigation metadata.
 -- 
-function M.parse_repl_java_stack(lines)
+M.parse_standard_stacktrace = function(lines)
     local stack_locations = {}
     for i, line in pairs(lines) do
         local can_parse = string.find(line, ".*%(.*%.java:.*%)") ~=nil
@@ -273,10 +279,11 @@ function M.window_picker(blacklist)
 end
 
 
--- BINGO : this is written in 1 go. We can read the lines like this & use the repl with another strategy.
---
+-- DAP stacks parsing experiment:
+-- BINGO : stacks is written in 1 go. We can read the lines like this & use the repl with another strategy.
+-- 
 --TODO: 'o' keybinding already jumps to location. we only need to hl
--- TODO: this is sensible but how to know when the entire buffer is written?
+--[[
 function experiment()
     vim.api.nvim_buf_attach(0, true, { 
         on_lines = function (line, handle, tick, first_line, last_line, bytecount,_,_) 
@@ -292,7 +299,7 @@ function experiment()
         -- print(vim.inspect(buffer_lines))
         
 end
-
 vim.keymap.set("n", "dx", M.run_repl, {desc = 'exp'})
-
+--]]
+--
 return M
