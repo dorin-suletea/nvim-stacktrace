@@ -33,7 +33,7 @@ require("nvim-stacktrace").setup({
 ```
 
 ### Usage
-The plugin parsers `dap-repl` or `dap-terminal` whenever the contents of said buffer change
+The plugin parses `dap-repl` or `dap-terminal` whenever the contents of said buffer change
 and highlights paths in your current workspace that are not gitignored.
 
 Pressing the `jump_key` on any highlighted buffer will jump to its source.
@@ -41,4 +41,7 @@ Pressing the `jump_key` on any highlighted buffer will jump to its source.
 If multiple buffers can be used to open the source code you will be promoted to select which buffer to use. 
 candidates for this can be blacklisted via `win_picker_blacklist`
 
-
+### Contributions
+* For any feedback/problems or questions please open an issue. I will do my best to help.
+* Feel free to open a PR for any addition or new use-case.
+* If you find this plugin useful let me know &| tell a friend.
