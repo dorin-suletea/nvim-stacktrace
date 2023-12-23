@@ -1,6 +1,8 @@
 # nvim-stacktrace
 A UI companion to [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) enabling highlighting and navigating java stack traces.
 
+![after](./example.gif)
+
 Tested on version `NVIM v0.9.1`.
 
 ### Installation
