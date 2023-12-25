@@ -13,7 +13,7 @@ Eg packer.
 ```
 use "mfussenegger/nvim-dap"
 use "rcarriga/nvim-dap-ui"
-use "dorin-suletea/nvim-stacktrace.nvim"
+use "dorin-suletea/nvim-stacktrace"
 ```
 
 ### Configuration
