@@ -1,7 +1,7 @@
 local util = require("util")
 
 local default_config = {
-    win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP Stacks"},       -- when jumping to source never consider these buffer names as candidates
+    win_picker_blacklist = {"dap%-repl", "dap%-terminal", "DAP.*"},            -- when jumping to source never consider these buffer names as candidates
     highlight_group = "Tag",                                                   -- use this hl group for highlighting jumpable locations. Check ":hi" for default groups.
     jump_key = "<CR>",                                                         -- will open source code location when this key is pressed in one of the target buffers
 }

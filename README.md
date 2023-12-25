@@ -27,7 +27,7 @@ require("nvim-stacktrace").setup({
     win_picker_blacklist = { 
         "dap%-repl", 
         "dap%-terminal", 
-        "DAP Stacks"
+        "DAP.*"
     },                       -- when jumping to source never consider these buffer names as candidates
     highlight_group = "Tag", -- highlighting for jumpable locations. Check ":hi" for default groups.
     jump_key = "<CR>",       -- key for jumping to source. 
